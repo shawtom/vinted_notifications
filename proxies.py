@@ -251,7 +251,7 @@ def convert_proxy_string_to_dict(proxy: Optional[str]) -> dict:
         return {}
 
     if "://" in proxy:
-        # Protocol is specified (e.g., "http://127.0.0.1:8080")
+        # Protocol is specified (e.g., "http://127.0.0.1:18473")
         protocol, address = proxy.split("://")
         if protocol == "http":
             return {"http": f"{proxy}", "https": f"{proxy}"}
