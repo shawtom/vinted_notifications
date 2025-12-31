@@ -313,7 +313,7 @@ def update_config():
     # Update RSS parameters
     rss_enabled = "rss_enabled" in request.form
     db.set_parameter("rss_enabled", str(rss_enabled))
-    db.set_parameter("rss_port", request.form.get("rss_port", "8080"))
+    db.set_parameter("rss_port", request.form.get("rss_port", "18473"))
     db.set_parameter("rss_max_items", request.form.get("rss_max_items", "100"))
 
     # Update System parameters
@@ -537,7 +537,7 @@ def api_logs():
 def web_ui_process():
     logger.info("Web UI process started")
     try:
-        app.run(host="0.0.0.0", port=8000, debug=False)
+        app.run(host="0.0.0.0", port=18472, debug=False)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Web UI process stopped")
     except Exception as e:

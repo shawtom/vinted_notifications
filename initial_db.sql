@@ -53,7 +53,7 @@ VALUES ('telegram_enabled', 'False'),
        ('telegram_process_running', 'False'),
 
        ('rss_enabled', 'False'),
-       ('rss_port', '8080'),
+       ('rss_port', '18473'),
        ('rss_max_items', '100'),
        ('rss_process_running', 'False'),
 
