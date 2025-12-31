@@ -5,8 +5,8 @@ services:
     image: fuyucch1/vinted-notifications:latest
     pull_policy: always
     ports:
-      - "8000:8000"
-      - "8080:8080"
+      - "18472:18472"
+      - "18473:18473"
     volumes:
       - VN_data:/app/data
       - VN_logs:/app/logs

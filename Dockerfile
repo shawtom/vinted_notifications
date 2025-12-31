@@ -29,8 +29,8 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose ports
-EXPOSE 8000
-EXPOSE 8080
+EXPOSE 18472
+EXPOSE 18473
 
 # Run as root for the entrypoint to adjust ownership if needed,
 # then the entrypoint will drop to ${APP_USER}.

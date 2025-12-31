@@ -16,7 +16,7 @@ curl -O https://raw.githubusercontent.com/Fuyucch1/Vinted-Notifications/main/doc
 docker-compose up -d
 ```
 
-Then open [http://localhost:8000](http://localhost:8000) in your browser.
+Then open [http://localhost:18472](http://localhost:18472) in your browser.
 
 ---
 
@@ -54,8 +54,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
    ```bash
    docker run -d \
      --name vinted-notifications \
-     -p 8000:8000 \
-     -p 8080:8080 \
+     -p 18472:18472 \
+     -p 18473:18473 \
      -v "$(pwd)/data:/app/data" \
      -v "$(pwd)/logs:/app/logs" \
      --restart unless-stopped \
@@ -67,7 +67,7 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 3. **Access the Web UI**
 
-   Once started, access the Web UI at [http://localhost:8000](http://localhost:8000) to complete the setup.
+   Once started, access the Web UI at [http://localhost:18472](http://localhost:18472) to complete the setup.
 
 ### Option 2: Docker Compose (Recommended)
 
@@ -88,8 +88,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
        image: fuyucch1/vinted-notifications:latest
        pull_policy: always
        ports:
-         - "8000:8000"
-         - "8080:8080"
+         - "18472:18472"
+         - "18473:18473"
        volumes:
          - VN_data:/app/data
          - VN_logs:/app/logs
@@ -114,7 +114,7 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 3. **Access the Web UI**
 
-   Once started, access the Web UI at [http://localhost:8000](http://localhost:8000) to complete the setup.
+   Once started, access the Web UI at [http://localhost:18472](http://localhost:18472) to complete the setup.
 
 ### Option 3: Self-Build
 
@@ -143,9 +143,7 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 3. **Initial Configuration**
 
-   The application can be configured through the Web UI after starting. However, you can also change the Web UI port in
-   the
-   `configuration_values.py` file directly.
+   The application can be configured through the Web UI after starting. The Web UI runs on port 18472 by default, and the RSS feed runs on port 18473. These can be configured through the Web UI configuration panel.
 
 4. **Run the application**
 
@@ -153,13 +151,13 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
    python vinted_notifications.py
    ```
 
-   Once started, access the Web UI at [http://localhost:8000](http://localhost:8000) to complete the setup.
+   Once started, access the Web UI at [http://localhost:18472](http://localhost:18472) to complete the setup.
 
 ## 🚀 Usage
 
 ### Web UI
 
-The Web UI is the easiest way to manage the application. Access it at [http://localhost:8000](http://localhost:8000)
+The Web UI is the easiest way to manage the application. Access it at [http://localhost:18472](http://localhost:18472)
 after starting the application.
 
 Features available in the Web UI:
@@ -197,7 +195,7 @@ Queries must be added with a whole link. It works with filters.:
 ### RSS Feed
 
 The RSS feed provides an alternative way to receive notifications. After enabling it in the Web UI, access it
-at [http://localhost:8080](http://localhost:8080).
+at [http://localhost:18473](http://localhost:18473).
 
 ## ⚙️ Advanced Configuration
 
@@ -236,8 +234,8 @@ MESSAGE = '''\
    ```bash
    docker run -d \
      --name vinted-notifications \
-     -p 8000:8000 \
-     -p 8080:8080 \
+     -p 18472:18472 \
+     -p 18473:18473 \
      -v "$(pwd)/data:/app/data" \
      -v "$(pwd)/logs:/app/logs" \
      --restart unless-stopped \
