@@ -16,7 +16,12 @@ class RSSFeed:
         self.app = Flask(__name__)
         self.queue = queue
         self.items = []
-        self.max_items = db.get_parameter("rss_max_items")
+        max_items_param = db.get_parameter("rss_max_items")
+        try:
+            self.max_items = int(max_items_param) if max_items_param else 100
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid rss_max_items value: {max_items_param}, using default 100")
+            self.max_items = 100
 
         # Initialize feed generator
         self.fg = FeedGenerator()
@@ -88,7 +93,12 @@ class RSSFeed:
     def run(self):
 
         try:
-            port = db.get_parameter("rss_port")
+            port_param = db.get_parameter("rss_port")
+            try:
+                port = int(port_param) if port_param else 18473
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid rss_port value: {port_param}, using default 18473")
+                port = 18473
             logger.info(f"Starting RSS feed server on port {port}")
             self.app.run(host="0.0.0.0", port=port)
         except Exception as e:
