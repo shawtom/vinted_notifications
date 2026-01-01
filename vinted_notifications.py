@@ -261,6 +261,14 @@ if __name__ == "__main__":
         args=[items_queue, telegram_queue, rss_queue],
         name="process_monitor",
     )
+    # Add daily database cleanup job
+    monitor_scheduler.add_job(
+        db.cleanup_old_items,
+        "cron",
+        hour=2,
+        minute=0,
+        name="database_cleanup",
+    )
     monitor_scheduler.start()
 
     # 5. Create and start the Web UI process

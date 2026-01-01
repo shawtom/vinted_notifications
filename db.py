@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from traceback import print_exc
 
 DB_PATH = "./data/vinted_notifications.db"
@@ -452,6 +453,58 @@ def get_items_per_day():
 
         # Calculate items per day
         return round(total_items / days_diff, 1)
+    except Exception:
+        print_exc()
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+
+def cleanup_old_items():
+    """
+    Delete items from the database that are older than the retention period.
+    The retention period is specified in months via the 'retention_months' parameter.
+    Defaults to 2 months if not set.
+
+    Returns:
+        int: Number of items deleted
+    """
+    conn = None
+    try:
+        from logger import get_logger
+        logger = get_logger(__name__)
+
+        # Get retention period from database (default 2 months)
+        retention_months_param = get_parameter("retention_months")
+        try:
+            retention_months = int(retention_months_param) if retention_months_param else 2
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid retention_months value: {retention_months_param}, using default 2")
+            retention_months = 2
+
+        # Calculate cutoff timestamp (current time - retention period)
+        current_time = time.time()
+        # Calculate seconds in retention period (approximate: 30 days per month)
+        seconds_in_month = 30 * 24 * 60 * 60
+        cutoff_timestamp = current_time - (retention_months * seconds_in_month)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Count items to be deleted
+        cursor.execute("SELECT COUNT(*) FROM items WHERE timestamp < ?", (cutoff_timestamp,))
+        items_to_delete = cursor.fetchone()[0]
+
+        if items_to_delete > 0:
+            # Delete old items
+            cursor.execute("DELETE FROM items WHERE timestamp < ?", (cutoff_timestamp,))
+            conn.commit()
+            logger.info(f"Database cleanup: Deleted {items_to_delete} items older than {retention_months} month(s)")
+            return items_to_delete
+        else:
+            logger.debug(f"Database cleanup: No items older than {retention_months} month(s) to delete")
+            return 0
     except Exception:
         print_exc()
         return 0
