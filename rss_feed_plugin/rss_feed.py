@@ -72,22 +72,36 @@ class RSSFeed:
             logger.debug(f"Error extracting title from content: {e}")
             pass
 
-        # Create a new entry
-        fe = self.fg.add_entry()
-        fe.id(url)
-        fe.title(title)
-        fe.link(href=url)
-        fe.description(html.escape(content))
-        fe.published(datetime.datetime.now(datetime.timezone.utc))
-
         # Add to our items list (for tracking)
-        self.items.append((title, url, content, datetime.datetime.now()))
+        # Store as tuple: (title, url, content, published_datetime)
+        published_time = datetime.datetime.now(datetime.timezone.utc)
+        self.items.append((title, url, content, published_time))
 
-        # Limit the number of items
+        # Limit the number of items (keep most recent)
         if len(self.items) > self.max_items:
             self.items.pop(0)
 
     def serve_rss(self):
+        # Rebuild feed generator with only the most recent items
+        # This ensures we always return the most recent max_items
+        self.fg = FeedGenerator()
+        self.fg.title("Vinted Notifications")
+        self.fg.description("Latest items from Vinted matching your search queries")
+        self.fg.link(href=f'http://localhost:{db.get_parameter("rss_port")}')
+        self.fg.language("en")
+
+        # Add entries from items list (most recent first, limit to max_items)
+        # Items are stored as (title, url, content, published_time)
+        # Sort by published_time descending to get most recent first
+        sorted_items = sorted(self.items, key=lambda x: x[3], reverse=True)
+        for title, url, content, published_time in sorted_items[:self.max_items]:
+            fe = self.fg.add_entry()
+            fe.id(url)
+            fe.title(title)
+            fe.link(href=url)
+            fe.description(html.escape(content))
+            fe.published(published_time)
+
         return Response(self.fg.rss_str(), mimetype="application/rss+xml")
 
     def run(self):
