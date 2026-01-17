@@ -19,12 +19,14 @@ if not os.path.exists("./data/vinted_notifications.db"):
 
 import core
 from rss_feed_plugin.rss_feed import rss_feed_process
+from discord_webhook_plugin.discord_webhook import discord_webhook_process
 from web_ui_plugin.web_ui import web_ui_process
 
 
 # Global process references
 telegram_process = None
 rss_process = None
+discord_process = None
 scrape_process = None
 current_query_refresh_delay = None
 
@@ -65,7 +67,7 @@ def item_extractor(items_queue, new_items_queue):
         logger.info("Consumer process stopped")
 
 
-def dispatcher_function(input_queue, rss_queue, telegram_queue):
+def dispatcher_function(input_queue, rss_queue, telegram_queue, discord_queue):
     logger.info("Dispatcher process started")
     try:
         while True:
@@ -73,8 +75,10 @@ def dispatcher_function(input_queue, rss_queue, telegram_queue):
             item = input_queue.get()
             # Send to RSS queue
             rss_queue.put(item)
-            #
+            # Send to Telegram queue
             telegram_queue.put(item)
+            # Send to Discord queue
+            discord_queue.put(item)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Dispatcher process stopped")
     except Exception as e:
@@ -134,8 +138,8 @@ def check_refresh_delay(items_queue):
         logger.error(f"Error updating refresh delay: {e}", exc_info=True)
 
 
-def monitor_processes(items_queue, telegram_queue, rss_queue):
-    global telegram_process, rss_process
+def monitor_processes(items_queue, telegram_queue, rss_queue, discord_queue):
+    global telegram_process, rss_process, discord_process
 
     # Check if the query refresh delay has changed
     check_refresh_delay(items_queue)
@@ -183,17 +187,43 @@ def monitor_processes(items_queue, telegram_queue, rss_queue):
         rss_process.join()
         rss_process = None
 
+    ### DISCORD ###
+    # Check Discord process status
+    discord_should_run = db.get_parameter("discord_process_running") == "True"
+    # Check if the Discord webhook URL is set
+    discord_webhook_url = db.get_parameter("discord_webhook_url")
+    if not discord_webhook_url:
+        discord_should_run = False
+    discord_is_running = discord_process is not None and discord_process.is_alive()
+
+    if discord_should_run and not discord_is_running:
+        # Start Discord process
+        logger.info("Starting Discord webhook process based on database status")
+        discord_process = multiprocessing.Process(
+            target=discord_webhook_process, args=(discord_queue,)
+        )
+        discord_process.start()
+    elif not discord_should_run and discord_is_running:
+        # Stop Discord process
+        logger.info("Stopping Discord webhook process based on database status")
+        discord_process.terminate()
+        discord_process.join()
+        discord_process = None
+
 
 def plugin_checker():
-    # Get telegram and rss enable status
+    # Get telegram, rss, and discord enable status
     telegram_enabled = db.get_parameter("telegram_enabled")
     logger.info("Telegram enabled: {}".format(telegram_enabled))
     rss_enabled = db.get_parameter("rss_enabled")
     logger.info("RSS enabled: {}".format(rss_enabled))
+    discord_enabled = db.get_parameter("discord_enabled")
+    logger.info("Discord enabled: {}".format(discord_enabled))
 
     # Reset process status at startup
     db.set_parameter("telegram_process_running", telegram_enabled)
     db.set_parameter("rss_process_running", rss_enabled)
+    db.set_parameter("discord_process_running", discord_enabled)
 
 
 if __name__ == "__main__":
@@ -223,6 +253,7 @@ if __name__ == "__main__":
     new_items_queue = multiprocessing.Queue()
     rss_queue = multiprocessing.Queue()
     telegram_queue = multiprocessing.Queue()
+    discord_queue = multiprocessing.Queue()
 
     # 1. Create and start the scrape process
     # This process will scrape items and put them in the items_queue
@@ -247,6 +278,7 @@ if __name__ == "__main__":
             new_items_queue,
             rss_queue,
             telegram_queue,
+            discord_queue,
         ),
     )
     dispatcher_process.start()
@@ -258,7 +290,7 @@ if __name__ == "__main__":
         monitor_processes,
         "interval",
         seconds=5,
-        args=[items_queue, telegram_queue, rss_queue],
+        args=[items_queue, telegram_queue, rss_queue, discord_queue],
         name="process_monitor",
     )
     # Add daily database cleanup job
@@ -288,6 +320,8 @@ if __name__ == "__main__":
             telegram_process.join()
         if rss_process:
             rss_process.join()
+        if discord_process:
+            discord_process.join()
     except KeyboardInterrupt:
         # Handle Ctrl+C gracefully
         logger.info("Main process interrupted")
@@ -312,6 +346,10 @@ if __name__ == "__main__":
             rss_process.terminate()
             # Set the process status in the database
             db.set_parameter("rss_process_running", "False")
+        if discord_process and discord_process.is_alive():
+            discord_process.terminate()
+            # Set the process status in the database
+            db.set_parameter("discord_process_running", "False")
 
         # Wait for all processes to terminate
         scrape_process.join()
@@ -324,5 +362,7 @@ if __name__ == "__main__":
             telegram_process.join()
         if rss_process:
             rss_process.join()
+        if discord_process:
+            discord_process.join()
 
         logger.info("All processes terminated")

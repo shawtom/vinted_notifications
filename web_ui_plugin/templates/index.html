@@ -145,6 +145,27 @@
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h6 class="mb-0">Discord Webhook</h6>
+                                <small class="text-muted">{{ 'Running' if discord_running else 'Stopped' }}</small>
+                            </div>
+                            <div>
+                                {% if discord_running %}
+                                <button class="btn btn-sm btn-danger process-control" data-process="discord"
+                                        data-action="stop">
+                                    <i class="bi bi-stop-fill"></i> Stop
+                                </button>
+                                {% else %}
+                                <button class="btn btn-sm btn-success process-control" data-process="discord"
+                                        data-action="start">
+                                    <i class="bi bi-play-fill"></i> Start
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

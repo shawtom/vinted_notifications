@@ -97,6 +97,7 @@ def index():
     # Get process status from the database
     telegram_running = db.get_parameter("telegram_process_running") == "True"
     rss_running = db.get_parameter("rss_process_running") == "True"
+    discord_running = db.get_parameter("discord_process_running") == "True"
 
     # Get statistics for the dashboard
     stats = {
@@ -129,6 +130,7 @@ def index():
         items=formatted_items,
         telegram_running=telegram_running,
         rss_running=rss_running,
+        discord_running=discord_running,
         stats=stats,
     )
 
@@ -316,6 +318,11 @@ def update_config():
     db.set_parameter("rss_port", request.form.get("rss_port", "18473"))
     db.set_parameter("rss_max_items", request.form.get("rss_max_items", "100"))
 
+    # Update Discord parameters
+    discord_enabled = "discord_enabled" in request.form
+    db.set_parameter("discord_enabled", str(discord_enabled))
+    db.set_parameter("discord_webhook_url", request.form.get("discord_webhook_url", ""))
+
     # Update System parameters
     db.set_parameter("items_per_query", request.form.get("items_per_query", "20"))
     db.set_parameter(
@@ -345,7 +352,7 @@ def update_config():
 
 @app.route("/control/<process_name>/<action>", methods=["POST"])
 def control_process(process_name, action):
-    if process_name not in ["telegram", "rss"]:
+    if process_name not in ["telegram", "rss", "discord"]:
         return jsonify({"status": "error", "message": "Invalid process name"})
 
     if action == "start":
@@ -387,6 +394,29 @@ def control_process(process_name, action):
             db.set_parameter("rss_process_running", "True")
             logger.info("RSS feed process start requested")
             return jsonify({"status": "success", "message": "RSS feed start requested"})
+        
+        if process_name == "discord":
+            # Check current status
+            if db.get_parameter("discord_process_running") == "True":
+                return jsonify(
+                    {"status": "warning", "message": "Discord webhook already running"}
+                )
+
+            # Check if discord_webhook_url is set
+            discord_webhook_url = db.get_parameter("discord_webhook_url")
+            if not discord_webhook_url:
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": "Please set Discord webhook URL in the configuration panel before starting the Discord process",
+                    }
+                )
+
+            # Update process status in the database
+            # The manager process will detect this and start the process
+            db.set_parameter("discord_process_running", "True")
+            logger.info("Discord webhook process start requested")
+            return jsonify({"status": "success", "message": "Discord webhook start requested"})
 
     elif action == "stop":
         if process_name == "telegram":
@@ -414,6 +444,19 @@ def control_process(process_name, action):
             db.set_parameter("rss_process_running", "False")
             logger.info("RSS feed process stop requested")
             return jsonify({"status": "success", "message": "RSS feed stop requested"})
+        
+        if process_name == "discord":
+            # Check current status
+            if db.get_parameter("discord_process_running") != "True":
+                return jsonify(
+                    {"status": "warning", "message": "Discord webhook not running"}
+                )
+
+            # Update process status in the database
+            # The manager process will detect this and stop the process
+            db.set_parameter("discord_process_running", "False")
+            logger.info("Discord webhook process stop requested")
+            return jsonify({"status": "success", "message": "Discord webhook stop requested"})
 
     return jsonify({"status": "error", "message": "Invalid action"})
 
@@ -423,8 +466,9 @@ def process_status():
     # Get process status from the database
     telegram_running = db.get_parameter("telegram_process_running") == "True"
     rss_running = db.get_parameter("rss_process_running") == "True"
+    discord_running = db.get_parameter("discord_process_running") == "True"
 
-    return jsonify({"telegram": telegram_running, "rss": rss_running})
+    return jsonify({"telegram": telegram_running, "rss": rss_running, "discord": discord_running})
 
 
 @app.route("/allowlist")

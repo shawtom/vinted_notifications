@@ -69,4 +69,7 @@ VALUES ('telegram_enabled', 'False'),
        ('check_proxies', 'False'),
        ('last_proxy_check_time', '0'),
        ('banwords', ''),
-       ('retention_months', '2');
+       ('retention_months', '2'),
+       ('discord_enabled', 'False'),
+       ('discord_webhook_url', ''),
+       ('discord_process_running', 'False');
