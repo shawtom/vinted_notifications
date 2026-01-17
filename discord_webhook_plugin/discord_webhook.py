@@ -238,18 +238,9 @@ class DiscordWebhook:
         # Check if webhook URL is configured
         webhook_url = db.get_parameter("discord_webhook_url")
         if not webhook_url:
-            logger.debug("Discord webhook URL not configured, skipping notification")
             return
         
         try:
-            # Log the full content to see what we're working with
-            logger.info(f"Discord - full content length: {len(content)} chars")
-            logger.info(f"Discord - content preview (first 500 chars): {repr(content[:500])}")
-            
-            # Get message template to understand the format
-            message_template = db.get_parameter("message_template")
-            logger.info(f"Discord - message_template: {repr(message_template)}")
-            
             # Try to get item data from database first (most reliable)
             # The item was just added to the database, so it should be there
             db_item = self.get_item_from_database(url)
@@ -267,28 +258,19 @@ class DiscordWebhook:
                 # The content should have the formatted template with brand info
                 parsed = self.parse_content(content)
                 brand = parsed.get('brand', '')
-                
-                logger.info(f"Discord - got from DB: title='{title}', price='{price}', brand='{brand}' (from content), image='{image_url}'")
             else:
                 # Fallback: parse from content (same as RSS feed)
-                logger.warning(f"Discord - item not found in database, parsing from content only")
                 parsed = self.parse_content(content)
                 
                 title = parsed['title']
                 if not title:
                     title = "Vinted Item"
-                    logger.warning(f"Could not extract title from content, using fallback for URL: {url}")
                 
                 # Format price with currency symbol
                 price_raw = parsed['price']
                 price = self.format_price_with_symbol(price_raw)
                 brand = parsed['brand']
                 image_url = parsed['image']
-                
-                logger.info(f"Discord parsing - title: '{title}', price: '{price}' (from '{price_raw}'), brand: '{brand}', image: '{image_url}'")
-            
-            # Log what will be added to description
-            logger.info(f"Discord embed values - price: '{price}' (truthy: {bool(price)}), brand: '{brand}' (truthy: {bool(brand)})")
             
             # Create embed using the values (matching RSS feed format: Title, Price, Brand)
             embed = self.create_embed(
@@ -298,9 +280,6 @@ class DiscordWebhook:
                 image_url=image_url,
                 item_url=url
             )
-            
-            # Log the final embed description
-            logger.info(f"Discord embed description: '{embed.get('description', '')}'")
             
             # Prepare payload
             payload = {
@@ -315,8 +294,6 @@ class DiscordWebhook:
                 timeout=10
             )
             response.raise_for_status()
-            
-            logger.debug(f"Discord notification sent successfully for: {title}")
             
         except requests.exceptions.RequestException as e:
             logger.error(
