@@ -4,6 +4,7 @@ import db
 import datetime
 import re
 import requests
+from urllib.parse import urlparse
 from logger import get_logger
 
 # Get logger for this module
@@ -42,6 +43,7 @@ class DiscordWebhook:
     def parse_content(self, content):
         """
         Parse the formatted content to extract title, brand, price, and image.
+        This method is copied from rss_feed.py which works correctly.
         
         Returns:
             dict: Dictionary with 'title', 'brand', 'price', 'image' keys
@@ -54,32 +56,48 @@ class DiscordWebhook:
         }
         
         try:
-            # Extract title (🆕 Title : {title})
-            title_match = re.search(r'🆕\s*Title\s*:\s*(.+?)(?:\n|$)', content)
-            if title_match:
-                parsed['title'] = title_match.group(1).strip()
-            else:
-                # Fallback: try to extract any text before first newline or emoji
-                first_line = content.split('\n')[0].strip()
-                if first_line and not first_line.startswith('🆕'):
-                    parsed['title'] = first_line
-            
-            # Extract brand (🛍️ Brand : {brand})
-            brand_match = re.search(r'🛍️\s*Brand\s*:\s*(.+?)(?:\n|$)', content)
-            if brand_match:
-                parsed['brand'] = brand_match.group(1).strip()
-            
-            # Extract price (💶 Price : {price})
-            price_match = re.search(r'💶\s*Price\s*:\s*(.+?)(?:\n|$)', content)
-            if price_match:
-                parsed['price'] = price_match.group(1).strip()
-            
-            # Extract image link (<a href="{image}">)
+            # Extract image link first (works for both formats)
             image_match = re.search(r'<a\s+href=["\']([^"\']+)["\']', content)
             if image_match:
                 parsed['image'] = image_match.group(1)
+            
+            # Check if content uses emoji format (🆕 Title : ...)
+            has_emoji_format = '🆕' in content or '💶' in content or '🛍️' in content
+            
+            if has_emoji_format:
+                # Emoji format: 🆕 Title : {title}\n💶 Price : {price}\n🛍️ Brand : {brand}
+                title_match = re.search(r'🆕\s*Title\s*:\s*(.+?)(?:\n|$)', content)
+                if title_match:
+                    parsed['title'] = title_match.group(1).strip()
+                
+                price_match = re.search(r'💶\s*Price\s*:\s*(.+?)(?:\n|$)', content)
+                if price_match:
+                    parsed['price'] = price_match.group(1).strip()
+                
+                brand_match = re.search(r'🛍️\s*Brand\s*:\s*(.+?)(?:\n|$)', content)
+                if brand_match:
+                    parsed['brand'] = brand_match.group(1).strip()
+            else:
+                # Simple line-based format: {title}\r\n{price}\r\n{brand}\r\n<a href="{image}">
+                # Split by newlines (handle both \n and \r\n)
+                lines = [line.strip() for line in re.split(r'\r?\n', content) if line.strip()]
+                
+                # Remove the image HTML line if present
+                lines = [line for line in lines if not line.startswith('<a href')]
+                
+                # First line is title
+                if len(lines) > 0:
+                    parsed['title'] = lines[0]
+                
+                # Second line is price
+                if len(lines) > 1:
+                    parsed['price'] = lines[1]
+                
+                # Third line is brand
+                if len(lines) > 2:
+                    parsed['brand'] = lines[2]
         except Exception as e:
-            logger.debug(f"Error parsing content: {e}")
+            logger.error(f"Error parsing content: {e}", exc_info=True)
         
         return parsed
 
@@ -91,18 +109,21 @@ class DiscordWebhook:
         Returns:
             dict: Discord embed object
         """
-        # Build description with Price and Brand (matching RSS feed format)
-        description_lines = []
-        
+        # Build description with Price and Brand on separate lines (matching RSS feed format)
+        # Format: Price (line 1), Brand (line 2)
+        description_parts = []
         if price:
-            description_lines.append(price)
+            description_parts.append(price)
         if brand:
-            description_lines.append(brand)
+            description_parts.append(brand)
+        
+        # Join with newline to ensure they're on separate lines
+        description = "\n".join(description_parts)
         
         embed = {
             "title": title or "Vinted Item",
             "url": item_url,  # Makes the title clickable
-            "description": "\n".join(description_lines) if description_lines else "",
+            "description": description,
             "color": 0x00ff00,  # Green color
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "footer": {
@@ -118,9 +139,97 @@ class DiscordWebhook:
         
         return embed
 
+    def format_price_with_symbol(self, price_str):
+        """
+        Format price string to use currency symbols instead of codes.
+        Converts "8.0 GBP" to "£8.0", "10.5 EUR" to "€10.5", etc.
+        
+        Args:
+            price_str (str): Price string like "8.0 GBP" or "10.5 EUR"
+            
+        Returns:
+            str: Formatted price with symbol like "£8.0" or "€10.5"
+        """
+        if not price_str:
+            return ""
+        
+        # Currency code to symbol mapping
+        currency_map = {
+            'GBP': '£',
+            'EUR': '€',
+            'USD': '$',
+            'CAD': 'C$',
+            'AUD': 'A$',
+            'CHF': 'CHF',
+            'PLN': 'zł',
+            'CZK': 'Kč',
+            'SEK': 'kr',
+            'NOK': 'kr',
+            'DKK': 'kr',
+        }
+        
+        # Try to match currency code at the end
+        for currency_code, symbol in currency_map.items():
+            if price_str.upper().endswith(currency_code):
+                # Extract the numeric part
+                price_value = price_str[:-len(currency_code)].strip()
+                return f"{symbol}{price_value}"
+        
+        # If no currency code found, return as-is
+        return price_str
+
+    def get_item_from_database(self, url):
+        """
+        Extract item ID from URL and get item data from database.
+        This is more reliable than parsing the content string.
+        
+        Args:
+            url (str): The Vinted item URL (e.g., https://www.vinted.fr/items/123456)
+            
+        Returns:
+            tuple: (title, price, currency, photo_url) or None if not found
+        """
+        try:
+            # Extract item ID from URL (format: https://www.vinted.fr/items/123456)
+            parsed_url = urlparse(url)
+            path_parts = [p for p in parsed_url.path.strip("/").split("/") if p]
+            
+            # Find the item ID (it's the number after "items" in the path)
+            item_id = None
+            if "items" in path_parts:
+                items_index = path_parts.index("items")
+                if items_index + 1 < len(path_parts):
+                    item_id = path_parts[items_index + 1]
+            
+            if not item_id:
+                # Try alternative: last numeric part of path
+                for part in reversed(path_parts):
+                    if part.isdigit():
+                        item_id = part
+                        break
+            
+            if item_id:
+                # Query database for item
+                conn = db.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT title, price, currency, photo_url FROM items WHERE item=? ORDER BY timestamp DESC LIMIT 1",
+                    (item_id,)
+                )
+                result = cursor.fetchone()
+                conn.close()
+                
+                if result:
+                    return result
+        except Exception as e:
+            logger.error(f"Error getting item from database: {e}", exc_info=True)
+        
+        return None
+
     def send_notification(self, content, url):
         """
         Send a notification to Discord via webhook.
+        Uses the message template format to extract values.
         
         Args:
             content (str): The formatted content string
@@ -133,18 +242,65 @@ class DiscordWebhook:
             return
         
         try:
-            # Parse content to extract item details
-            parsed = self.parse_content(content)
-            title = parsed['title'] or "Vinted Item"
+            # Log the full content to see what we're working with
+            logger.info(f"Discord - full content length: {len(content)} chars")
+            logger.info(f"Discord - content preview (first 500 chars): {repr(content[:500])}")
             
-            # Create embed
+            # Get message template to understand the format
+            message_template = db.get_parameter("message_template")
+            logger.info(f"Discord - message_template: {repr(message_template)}")
+            
+            # Try to get item data from database first (most reliable)
+            # The item was just added to the database, so it should be there
+            db_item = self.get_item_from_database(url)
+            
+            if db_item:
+                # Got data from database: (title, price, currency, photo_url)
+                title, price_val, currency, image_url = db_item
+                # Format price with currency symbol instead of code
+                if price_val and currency:
+                    price = self.format_price_with_symbol(f"{price_val} {currency}")
+                else:
+                    price = ""
+                
+                # Brand is not stored in database, so we need to parse it from content
+                # The content should have the formatted template with brand info
+                parsed = self.parse_content(content)
+                brand = parsed.get('brand', '')
+                
+                logger.info(f"Discord - got from DB: title='{title}', price='{price}', brand='{brand}' (from content), image='{image_url}'")
+            else:
+                # Fallback: parse from content (same as RSS feed)
+                logger.warning(f"Discord - item not found in database, parsing from content only")
+                parsed = self.parse_content(content)
+                
+                title = parsed['title']
+                if not title:
+                    title = "Vinted Item"
+                    logger.warning(f"Could not extract title from content, using fallback for URL: {url}")
+                
+                # Format price with currency symbol
+                price_raw = parsed['price']
+                price = self.format_price_with_symbol(price_raw)
+                brand = parsed['brand']
+                image_url = parsed['image']
+                
+                logger.info(f"Discord parsing - title: '{title}', price: '{price}' (from '{price_raw}'), brand: '{brand}', image: '{image_url}'")
+            
+            # Log what will be added to description
+            logger.info(f"Discord embed values - price: '{price}' (truthy: {bool(price)}), brand: '{brand}' (truthy: {bool(brand)})")
+            
+            # Create embed using the values (matching RSS feed format: Title, Price, Brand)
             embed = self.create_embed(
                 title=title,
-                brand=parsed['brand'],
-                price=parsed['price'],
-                image_url=parsed['image'],
+                brand=brand,
+                price=price,
+                image_url=image_url,
                 item_url=url
             )
+            
+            # Log the final embed description
+            logger.info(f"Discord embed description: '{embed.get('description', '')}'")
             
             # Prepare payload
             payload = {
