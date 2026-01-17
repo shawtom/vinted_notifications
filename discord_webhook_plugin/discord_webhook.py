@@ -86,38 +86,29 @@ class DiscordWebhook:
     def create_embed(self, title, brand, price, image_url, item_url):
         """
         Create a Discord embed for a Vinted item.
+        Format: Title (as embed title with link), Price, Brand (in description)
         
         Returns:
             dict: Discord embed object
         """
+        # Build description with Price and Brand (matching RSS feed format)
+        description_lines = []
+        
+        if price:
+            description_lines.append(price)
+        if brand:
+            description_lines.append(brand)
+        
         embed = {
-            "title": "🆕 New Vinted Item",
-            "description": f"**{title}**",
-            "url": item_url,
+            "title": title or "Vinted Item",
+            "url": item_url,  # Makes the title clickable
+            "description": "\n".join(description_lines) if description_lines else "",
             "color": 0x00ff00,  # Green color
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "footer": {
                 "text": "Vinted Notifications"
             }
         }
-        
-        # Add fields for brand and price
-        fields = []
-        if brand:
-            fields.append({
-                "name": "Brand",
-                "value": brand,
-                "inline": True
-            })
-        if price:
-            fields.append({
-                "name": "Price",
-                "value": price,
-                "inline": True
-            })
-        
-        if fields:
-            embed["fields"] = fields
         
         # Add image if available
         if image_url:
