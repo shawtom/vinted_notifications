@@ -47,6 +47,19 @@
                                         </div>
                                     </div>
                                     <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="query_delay" class="form-label">Query Delay
+                                                    (seconds)</label>
+                                                <input type="number" class="form-control" id="query_delay"
+                                                       name="query_delay"
+                                                       value="{{ params.query_delay }}">
+                                                <small class="form-text text-muted">Delay between processing each query
+                                                    to avoid rate limiting</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
                                         <div class="col-md-12">
                                             <div class="mb-3">
                                                 <label for="banwords-input" class="form-label">Banwords</label>

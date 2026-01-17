@@ -62,6 +62,7 @@ VALUES ('telegram_enabled', 'False'),
 
        ('items_per_query', '20'),
        ('query_refresh_delay', '60'),
+       ('query_delay', '5'),
 
        ('proxy_list', ''),
        ('proxy_list_link', ''),

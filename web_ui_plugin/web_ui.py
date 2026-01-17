@@ -321,6 +321,7 @@ def update_config():
     db.set_parameter(
         "query_refresh_delay", request.form.get("query_refresh_delay", "60")
     )
+    db.set_parameter("query_delay", request.form.get("query_delay", "5"))
     db.set_parameter("banwords", request.form.get("banwords", ""))
 
     # Update Proxy parameters

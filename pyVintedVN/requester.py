@@ -4,6 +4,7 @@ import sys
 import os
 import db
 import random
+import time
 import requests
 from requests.exceptions import HTTPError
 
@@ -122,6 +123,44 @@ class Requester:
         while tried < self.MAX_RETRIES:
             tried += 1
             with self.session.get(url, params=params) as response:
+                # Handle 503 Service Unavailable with exponential backoff
+                if response.status_code == 503:
+                    if tried < self.MAX_RETRIES:
+                        wait_time = (2 ** tried) + random.uniform(0, 1)  # Exponential backoff: 2s, 4s, 8s
+                        logger.warning(
+                            f"503 Service Unavailable for URL: {url}, waiting {wait_time:.2f}s before retry {tried}/{self.MAX_RETRIES}"
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(
+                            f"503 error persisted after {self.MAX_RETRIES} retries for URL: {url}"
+                        )
+                        return response
+                
+                # Handle 429 Rate Limit with Retry-After header support
+                if response.status_code == 429:
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        try:
+                            wait_time = int(retry_after) + random.uniform(0, 5)
+                        except (ValueError, TypeError):
+                            wait_time = 60 + random.uniform(0, 5)  # Default to 60 seconds
+                    else:
+                        wait_time = 60 + random.uniform(0, 5)  # Default to 60 seconds if no Retry-After header
+                    
+                    if tried < self.MAX_RETRIES:
+                        logger.warning(
+                            f"429 Rate Limited for URL: {url}, waiting {wait_time:.2f}s (Retry-After: {retry_after or 'not provided'}) before retry {tried}/{self.MAX_RETRIES}"
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(
+                            f"429 error persisted after {self.MAX_RETRIES} retries for URL: {url}"
+                        )
+                        return response
+                
                 if response.status_code in (401, 404) and tried < self.MAX_RETRIES:
                     print(f"Cookies invalid, retrying {tried}/{self.MAX_RETRIES}")
                     if self.debug:

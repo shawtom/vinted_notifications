@@ -1,7 +1,9 @@
 import db
+import time
 import requests
 from pyVintedVN import Vinted, requester
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from requests.exceptions import HTTPError
 from logger import get_logger
 
 # Get logger for this module
@@ -293,14 +295,49 @@ def process_items(queue):
 
     # Get the number of items per query from the database
     items_per_query = int(db.get_parameter("items_per_query"))
+    
+    # Get delay between queries (default 5 seconds)
+    query_delay_param = db.get_parameter("query_delay")
+    try:
+        query_delay = int(query_delay_param) if query_delay_param else 5
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid query_delay value: {query_delay_param}, using default 5")
+        query_delay = 5
 
     # for each keyword we parse data
-    for query in all_queries:
-        all_items = vinted.items.search(query[1], nbr_items=items_per_query)
-        # Filter to only include new items. This should reduce the amount of db calls.
-        data = [item for item in all_items if item.is_new_item()]
-        queue.put((data, query[0]))
-        logger.info(f"Scraped {len(data)} items for query: {query[1]}")
+    for i, query in enumerate(all_queries):
+        try:
+            all_items = vinted.items.search(query[1], nbr_items=items_per_query)
+            # Filter to only include new items. This should reduce the amount of db calls.
+            data = [item for item in all_items if item.is_new_item()]
+            queue.put((data, query[0]))
+            logger.info(f"Scraped {len(data)} items for query: {query[1]}")
+            
+            # Add delay between queries (except for the last one)
+            if i < len(all_queries) - 1:
+                time.sleep(query_delay)
+        except HTTPError as e:
+            if e.response.status_code in (503, 429):
+                logger.warning(
+                    f"Rate limit/service unavailable for query {query[1]}: {str(e)}. "
+                    f"Waiting {query_delay * 6} seconds before next query."
+                )
+                # Wait longer if we hit rate limits (6x the normal delay)
+                time.sleep(query_delay * 6)
+            else:
+                logger.error(
+                    f"HTTP error for query {query[1]}: {str(e)}", exc_info=True
+                )
+                # Still add delay even on error to avoid hammering the API
+                if i < len(all_queries) - 1:
+                    time.sleep(query_delay)
+        except Exception as e:
+            logger.error(
+                f"Error processing query {query[1]}: {str(e)}", exc_info=True
+            )
+            # Still add delay even on error to avoid hammering the API
+            if i < len(all_queries) - 1:
+                time.sleep(query_delay)
 
 
 def clear_item_queue(items_queue, new_items_queue):
